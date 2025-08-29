@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ระบบโหวตวิดีโอ DDPM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <meta
+      name="description"
+      content="ระบบโหวตวิดีโอออนไลน์ - โหวตให้วิดีโอที่คุณชื่นชอบ"
+    />
+    <meta name="keywords" content="โหวต, วิดีโอ, ออนไลน์, แข่งขัน, DDPM" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎬</text></svg>"
+    />
+
+    <style>
+      .fade-in {
+        animation: fadeIn 0.5s ease-in;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .video-thumbnail-container {
+        position: relative;
+        width: 100%;
+        height: 200px;
+        border-radius: 12px;
+        overflow: hidden;
+        cursor: pointer;
+      }
+
+      .video-thumbnail {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+
+      .video-thumbnail img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .fallback-thumbnail {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        color: white;
+        text-align: center;
+        padding: 20px;
+      }
+
+      .play-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.3);
+        opacity: 0;
+        transition: opacity 0.3s ease;
+      }
+
+      .video-thumbnail-container:hover .play-overlay {
+        opacity: 1;
+      }
+
+      .play-button {
+        width: 60px;
+        height: 60px;
+        background: rgba(255, 255, 255, 0.9);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        transition: all 0.3s ease;
+      }
+
+      .video-thumbnail-container:hover .play-button {
+        background: rgba(255, 255, 255, 1);
+        transform: scale(1.1);
+      }
+
+      .glass-effect {
+        backdrop-filter: blur(10px);
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+
+      .animation-delay-200 {
+        animation-delay: 0.2s;
+      }
+
+      .animation-delay-400 {
+        animation-delay: 0.4s;
+      }
+
+      .spinner {
+        border: 2px solid #f3f3f3;
+        border-top: 2px solid #3498db;
+        border-radius: 50%;
+        width: 20px;
+        height: 20px;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      .notification {
+        transform: translateX(100%);
+        transition: transform 0.3s ease-in-out;
+      }
+
+      .notification.show {
+        transform: translateX(0);
+      }
+
+      .vote-btn {
+        transition: all 0.3s ease;
+      }
+
+      .vote-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+      }
+
+      .vote-btn:active {
+        transform: translateY(0);
+      }
+
+      .progress-bar {
+        transition: width 1s ease-in-out;
+      }
+
+      .video-card {
+        transition: all 0.3s ease;
+      }
+
+      .video-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+      }
+
+      @media (max-width: 768px) {
+        .video-thumbnail-container {
+          height: 150px;
+        }
+
+        .play-button {
+          width: 50px;
+          height: 50px;
+          font-size: 20px;
+        }
+      }
+    </style>
+  </head>
+  <body
+    class="bg-gradient-to-br from-blue-900 via-indigo-900 to-purple-900 min-h-screen"
+  >
+    <!-- Navigation -->
+    <nav
+      class="bg-black bg-opacity-30 backdrop-blur-md border-b border-white border-opacity-20 sticky top-0 z-40"
+    >
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center h-16">
+          <div class="flex items-center">
+            <h1 class="text-white text-xl font-bold">🎬 ระบบโหวตวิดีโอ DDPM</h1>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Login Modal -->
+    <div
+      id="loginModal"
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden"
+    >
+      <div class="glass-effect rounded-2xl p-8 max-w-md w-full mx-4">
+        <h2 class="text-2xl font-bold text-white mb-6 text-center">
+          🔐 เข้าสู่ระบบ
+        </h2>
+        <form id="loginForm" class="space-y-4">
+          <div>
+            <label class="block text-white text-sm font-medium mb-2"
+              >👤 ชื่อผู้ใช้</label
+            >
+            <input
+              type="text"
+              id="username"
+              class="w-full px-4 py-3 rounded-lg bg-white bg-opacity-20 text-white placeholder-gray-300 border border-white border-opacity-30 focus:outline-none focus:ring-2 focus:ring-orange-500"
+              placeholder="กรุณาใส่ชื่อผู้ใช้"
+              required
+              autocomplete="username"
+            />
+          </div>
+          <div>
+            <label class="block text-white text-sm font-medium mb-2"
+              >🔑 รหัสผ่าน</label
+            >
+            <input
+              type="password"
+              id="password"
+              class="w-full px-4 py-3 rounded-lg bg-white bg-opacity-20 text-white placeholder-gray-300 border border-white border-opacity-30 focus:outline-none focus:ring-2 focus:ring-orange-500"
+              placeholder="กรุณาใส่รหัสผ่าน"
+              required
+              autocomplete="current-password"
+            />
+          </div>
+          <div class="bg-yellow-900 bg-opacity-50 rounded-lg p-3">
+            <p class="text-yellow-200 text-sm">
+              🔒 <strong>สำหรับผู้ดูแลระบบเท่านั้น</strong><br />
+              ใช้สำหรับจัดการวิดีโอและดูผลโหวต
+            </p>
+          </div>
+          <div class="flex space-x-3">
+            <button
+              type="submit"
+              class="flex-1 bg-orange-600 hover:bg-orange-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+            >
+              🚀 เข้าสู่ระบบ
+            </button>
+            <button
+              type="button"
+              id="cancelLogin"
+              class="flex-1 bg-gray-600 hover:bg-gray-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+            >
+              ❌ ยกเลิก
+            </button>
+          </div>
+        </form>
+        <div
+          id="loginError"
+          class="mt-4 text-red-400 text-sm text-center hidden bg-red-900 bg-opacity-30 rounded-lg p-3"
+        ></div>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <!-- Public Voting Page -->
+      <div id="votingPage" class="fade-in">
+        <div class="text-center mb-12">
+          <h1
+            class="text-4xl md:text-6xl font-bold text-white mb-4 bg-gradient-to-r from-orange-400 to-red-500 bg-clip-text text-transparent"
+          >
+            🎬 โหวตวิดีโอที่คุณชื่นชอบ
+          </h1>
+          <p class="text-xl text-blue-200 max-w-4xl mx-auto">
+            คลิกที่รูปเพื่อดูวิดีโอ แล้วกดโหวตให้วิดีโอที่ชอบ (โหวตได้เพียง 1
+            คลิปต่อเครื่อง)
+          </p>
+
+          <!-- Live Stats -->
+          <div class="mt-8 flex justify-center space-x-8">
+            <div class="text-center">
+              <div
+                class="text-2xl font-bold text-orange-400"
+                id="liveVoteCount"
+              >
+                0
+              </div>
+              <div class="text-sm text-blue-300">โหวตทั้งหมด</div>
+            </div>
+            <div class="text-center">
+              <div class="text-2xl font-bold text-blue-400" id="liveVideoCount">
+                0
+              </div>
+              <div class="text-sm text-blue-300">วิดีโอทั้งหมด</div>
+            </div>
+          </div>
+          <div class="text-2xl font-bold text-orange-400"></div>
+        </div>
+        
+
+        <div
+          id="videoGrid"
+          class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
+        >
+          <!-- Videos will be populated here -->
+        </div>
+        <div class="bg-white p-6 rounded-xl shadow-lg max-w-xl mx-auto my-10">
+          <h2 class="text-2xl font-bold text-blue-600 mb-4">
+            📊 ผลการโหวตวิดีโอ
+          </h2>
+          <div id="voteResults" class="space-y-2">
+            <!-- รายการผลโหวตจะถูกโหลดด้วย JS -->
+          </div>
+        </div>
+      </div>
+        <!-- Quick Stats Dashboard -->
+
+        <!-- Add Video Form -->
+        <!-- Video Management List -->
+      </div>
+
+      <!-- Results Page -->
+      <div id="resultsPage" class="fade-in hidden">
+        <div class="text-center mb-8">
+          <h1 class="text-4xl font-bold text-white mb-4">📊 ผลการโหวต</h1>
+          <p class="text-xl text-blue-200">ดูผลการโหวตแบบเรียลไทม์</p>
+        </div>
+
+        <div class="glass-effect rounded-2xl p-8 mb-8">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
+            <div
+              class="bg-gradient-to-br from-orange-500 to-red-500 bg-opacity-20 rounded-xl p-6 border border-orange-500 border-opacity-30"
+            >
+              <div class="text-4xl font-bold text-orange-400" id="totalVotes">
+                0
+              </div>
+              <div class="text-orange-200 font-medium">โหวตทั้งหมด</div>
+              <div class="text-orange-300 text-sm mt-1">Total Votes</div>
+            </div>
+            <div
+              class="bg-gradient-to-br from-blue-500 to-indigo-500 bg-opacity-20 rounded-xl p-6 border border-blue-500 border-opacity-30"
+            >
+              <div class="text-4xl font-bold text-blue-400" id="totalVideos">
+                0
+              </div>
+              <div class="text-blue-200 font-medium">วิดีโอทั้งหมด</div>
+              <div class="text-blue-300 text-sm mt-1">Total Videos</div>
+            </div>
+            <div
+              class="bg-gradient-to-br from-green-500 to-teal-500 bg-opacity-20 rounded-xl p-6 border border-green-500 border-opacity-30"
+            >
+              <div class="text-4xl font-bold text-green-400" id="uniqueVoters">
+                0
+              </div>
+              <div class="text-green-200 font-medium">เครื่องที่โหวต</div>
+              <div class="text-green-300 text-sm mt-1">Unique Machines</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="resultsGrid" class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <!-- Results will be populated here -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Notification System -->
+    <div
+      id="loadingIndicator"
+      class="fixed top-4 right-4 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg hidden notification"
+    >
+      <div class="flex items-center space-x-2">
+        <div class="spinner"></div>
+        <span>กำลังโหลด...</span>
+      </div>
+    </div>
+
+    <div
+      id="successMessage"
+      class="fixed top-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg hidden notification"
+    >
+      <div class="flex items-center space-x-2">
+        <span>✅</span>
+        <span id="successText">สำเร็จ!</span>
+      </div>
+    </div>
+
+    <div
+      id="errorMessage"
+      class="fixed top-4 right-4 bg-red-600 text-white px-4 py-2 rounded-lg shadow-lg hidden notification"
+    >
+      <div class="flex items-center space-x-2">
+        <span>❌</span>
+        <span id="errorText">เกิดข้อผิดพลาด!</span>
+      </div>
+    </div>
+    <script>
+      async function loadVideos() {
+        const response = await fetch("videos.json");
+        const videos = await response.json();
+        const videoGrid = document.getElementById("videoGrid");
+        const liveVideoCount = document.getElementById("liveVideoCount");
+        videoGrid.innerHTML = "";
+
+        if (videos.length === 0) {
+          document.getElementById("noVideos").classList.remove("hidden");
+          return;
+        }
+
+        liveVideoCount.textContent = videos.length;
+
+        videos.forEach((video) => {
+          const card = document.createElement("div");
+          card.className =
+            "bg-white bg-opacity-10 rounded-xl p-4 video-card backdrop-blur-md";
+          card.innerHTML = `
+            <div class="video-thumbnail-container mb-4" onclick="window.open('${video.url}', '_blank')">
+                <div class="video-thumbnail">
+                    <img src="${video.thumbnail}" alt="${video.title}">
+                    <div class="play-overlay">
+                        <div class="play-button">▶️</div>
+                    </div>
+                </div>
+            </div>
+            <h3 class="text-xl font-bold text-white mb-1">${video.title}</h3>
+            <p class="text-sm text-blue-200 mb-4">${video.description}</p>
+            <button onclick="showVoteTimeout()" class="vote-btn w-full bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg">
+                👍 โหวตวิดีโอนี้
+            </button>
+            
+        `;
+          videoGrid.appendChild(card);
+        });
+      }
+
+      loadVideos();
+
+      function generateUUID() {
+        // ใช้ Math.random แทน crypto.randomUUID
+        return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
+          /[xy]/g,
+          function (c) {
+            var r = (Math.random() * 16) | 0,
+              v = c == "x" ? r : (r & 0x3) | 0x8;
+            return v.toString(16);
+          }
+        );
+      }
+
+      function getMachineID() {
+        let id = localStorage.getItem("ddpm_machine_id");
+        if (!id) {
+          id = generateUUID();
+          localStorage.setItem("ddpm_machine_id", id);
+        }
+        return id;
+      }
+
+      function voteVideo(videoId) {
+        const machineId = getMachineID();
+        fetch("/api/vote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ machineId, videoId }),
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.success) {
+              alert("โหวตสำเร็จแล้ว ขอบคุณค่ะ");
+            } else {
+              alert(data.message || "โหวตไม่สำเร็จ");
+            }
+          })
+          .catch(() => alert("ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์"));
+        updateLiveVoteCount();
+      }
+
+      async function updateLiveVoteCount() {
+        try {
+          const res = await fetch("/api/vote-count");
+          const data = await res.json();
+          document.getElementById("liveVoteCount").textContent = data.total;
+        } catch (e) {
+          console.error("ไม่สามารถดึงจำนวนโหวต:", e);
+        }
+      }
+      setInterval(updateLiveVoteCount, 5000);
+      updateLiveVoteCount();
+
+      (function () {
+        function c() {
+          var b = a.contentDocument || a.contentWindow.document;
+          if (b) {
+            var d = b.createElement("script");
+            d.innerHTML =
+              "window.__CF$cv$params={r:'961059252618a1c2',t:'MTc1MjgyNDYwNy4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";
+            b.getElementsByTagName("head")[0].appendChild(d);
+          }
+        }
+        if (document.body) {
+          var a = document.createElement("iframe");
+          a.height = 1;
+          a.width = 1;
+          a.style.position = "absolute";
+          a.style.top = 0;
+          a.style.left = 0;
+          a.style.border = "none";
+          a.style.visibility = "hidden";
+          document.body.appendChild(a);
+          if ("loading" !== document.readyState) c();
+          else if (window.addEventListener)
+            document.addEventListener("DOMContentLoaded", c);
+          else {
+            var e = document.onreadystatechange || function () {};
+            document.onreadystatechange = function (b) {
+              e(b);
+              "loading" !== document.readyState &&
+                ((document.onreadystatechange = e), c());
+            };
+          }
+        }
+      })();
+
+async function loadVoteResults() {
+  try {
+    // โหลดข้อมูลวิดีโอทั้งหมด
+    const videoRes = await fetch("videos.json");
+    const videos = await videoRes.json();
+
+    // โหลดข้อมูลผลโหวต
+    const res = await fetch("/api/vote-stats");
+    const data = await res.json();
+    const container = document.getElementById("voteResults");
+    container.innerHTML = "";
+
+    if (data.length === 0) {
+      container.innerHTML = "<p class='text-gray-500'>ยังไม่มีการโหวต</p>";
+      return;
+    }
+
+    // แปลง array เป็น object สำหรับ lookup videoId → title
+    const videoMap = {};
+    videos.forEach(v => videoMap[v.id] = v.title);
+
+    // สร้างรายการผลโหวต
+    data.forEach((item) => {
+      const div = document.createElement("div");
+      div.className = "flex justify-between items-center border-b pb-2";
+      div.innerHTML = `
+        <span class="font-medium text-gray-800">🎬 ${videoMap[item.videoId] || 'ไม่ทราบชื่อวิดีโอ'}</span>
+        <span class="font-bold text-green-600">${item.total} คะแนน</span>
+      `;
+      container.appendChild(div);
+    });
+
+  } catch (e) {
+    console.error("❌ โหลดผลโหวตไม่สำเร็จ", e);
+  }
+}
+function showVoteTimeout() {
+  alert("หมดเวลาการโหวตแล้ว");
+}
+
+
+
+      // เรียกตอนโหลดหน้า
+      document.addEventListener("DOMContentLoaded", loadVoteResults);
+    </script>
+  </body>
+</html>
